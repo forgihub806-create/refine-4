@@ -18,7 +18,8 @@ async function scrapeMetadata(mediaItemId: string, storage: IStorage) {
   const mediaItem = await storage.getMediaItem(mediaItemId);
   if (!mediaItem) return;
 
-  const result = await scrapeWithPlaywright(mediaItem.url);
+  const results = await scrapeWithPlaywright([mediaItem.url]);
+  const result = results[0];
 
   if (result) {
     const updates = {

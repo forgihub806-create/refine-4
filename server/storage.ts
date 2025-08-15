@@ -328,15 +328,6 @@ export class DrizzleStorage implements IStorage {
     console.log('DrizzleStorage.initializeDatabase: start');
 
     try {
-      // Create a new database connection
-      this.db = drizzle(new Database(this.dbPath), { schema });
-      console.log('Database connection established');
-    } catch (error) {
-      console.error('DrizzleStorage.initializeDatabase: error', error);
-      throw error;
-    }
-
-    try {
       // Execute each statement separately to avoid hanging
       const statements = [
         `CREATE TABLE IF NOT EXISTS media_items (
