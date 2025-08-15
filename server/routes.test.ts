@@ -1,6 +1,18 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, vi } from 'vitest';
 import request from 'supertest';
 import { startServer, stopServer } from './index';
+import { scrapeWithPlaywright } from './scraper';
+
+vi.mock('./scraper.ts', () => ({
+  scrapeWithPlaywright: vi.fn().mockResolvedValue([
+    {
+      url: 'http://example.com/video.mp4',
+      title: 'Scraped Title',
+      description: 'Scraped description.',
+      thumbnail: 'http://example.com/thumbnail.jpg',
+    },
+  ]),
+}));
 import type { Server } from 'http';
 import type { Express } from 'express';
 
@@ -62,4 +74,32 @@ describe('API Routes', () => {
     expect(getResponse.status).toBe(200);
     expect(getResponse.body.some(cat => cat.name === 'Test Category')).toBe(true);
   });
+
+  it('should trigger metadata fetch', async () => {
+    const createResponse = await request(app)
+      .post('/api/media')
+      .send({ urls: ['http://example.com/video2.mp4'] });
+    const mediaId = createResponse.body[0].id;
+
+    const response = await request(app).post(`/api/media/${mediaId}/metadata`);
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.action).toBe("metadata_fetched");
+    expect(response.body.mediaItem.id).toBe(mediaId);
+    expect(response.body.mediaItem.title).toBe('Scraped Title');
+  }, 10000);
+
+  it('should trigger metadata refresh', async () => {
+    const createResponse = await request(app)
+      .post('/api/media')
+      .send({ urls: ['http://example.com/video3.mp4'] });
+    const mediaId = createResponse.body[0].id;
+
+    const response = await request(app).post(`/api/media/${mediaId}/refresh`);
+    expect(response.status).toBe(200);
+    expect(response.body.success).toBe(true);
+    expect(response.body.action).toBe("metadata_refreshed");
+    expect(response.body.mediaItem.id).toBe(mediaId);
+    expect(response.body.mediaItem.title).toBe('Scraped Title');
+  }, 10000);
 });

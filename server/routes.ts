@@ -210,6 +210,30 @@ export function registerRoutes(app: Express, storage: IStorage): Server {
     }
   });
 
+  app.post("/api/media/:id/metadata", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      await scrapeMetadata(id, storage);
+      const mediaItem = await storage.getMediaItem(id);
+      res.json({ success: true, mediaItem, action: "metadata_fetched" });
+    } catch (error) {
+      console.error("Error fetching metadata:", error);
+      res.status(500).json({ error: "Failed to fetch metadata" });
+    }
+  });
+
+  app.post("/api/media/:id/refresh", async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      await scrapeMetadata(id, storage);
+      const mediaItem = await storage.getMediaItem(id);
+      res.json({ success: true, mediaItem, action: "metadata_refreshed" });
+    } catch (error) {
+      console.error("Error refreshing metadata:", error);
+      res.status(500).json({ error: "Failed to refresh metadata" });
+    }
+  });
+
   // Tags Routes
   app.get("/api/tags", async (req: Request, res: Response) => {
     try {
