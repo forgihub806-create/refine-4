@@ -1,12 +1,12 @@
-
 import { chromium, type Browser, type Page } from 'playwright';
 
 export interface ScrapedMetadata {
+  url: string;
   title: string;
   description?: string;
   thumbnail?: string;
+  error?: string;
 }
-
 
 function normalizeUrl(url: string): string {
   try {
@@ -19,61 +19,98 @@ function normalizeUrl(url: string): string {
   } catch (error) {
     console.error(`Invalid URL: ${url}`, error);
   }
-  return url; // Return original url if normalization fails
+  return url; // Return original if normalization fails
 }
 
-
-async function scrapeWithPlaywright(url: string): Promise<ScrapedMetadata | null> {
-  let browser: Browser | null = null;
+async function scrapeSingle(url: string, browser: Browser): Promise<ScrapedMetadata> {
+  const normalized = normalizeUrl(url);
+  const page: Page = await browser.newPage();
   try {
-    const normalized = normalizeUrl(url);
-    browser = await chromium.launch({ headless: true });
-    const page: Page = await browser.newPage();
-    await page.goto(normalized, { waitUntil: 'domcontentloaded' });
+    await page.goto(normalized, { waitUntil: 'networkidle' });
 
-    // Wait for a plausible title element to ensure the page is loading
-    await page.waitForSelector('h1, .title, .video-title', { timeout: 15000 });
+    // Allow time for dynamic JS content to render
+    await page.waitForTimeout(2000);
 
+    // Try title from multiple selectors + OG tags
     const title = await page.evaluate(() => {
-      const titleElement = document.querySelector('h1, .title, .video-title');
-      return titleElement ? titleElement.textContent?.trim() : null;
+      const selectors = [
+        'h1',
+        '.title',
+        '.video-title',
+        '.share-title'
+      ];
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el?.textContent?.trim()) return el.textContent.trim();
+      }
+      const ogTitle = document.querySelector('meta[property="og:title"]') as HTMLMetaElement;
+      if (ogTitle?.content) return ogTitle.content.trim();
+      return null;
     });
 
-    if (!title) {
-      throw new Error('Could not find title element');
-    }
+    if (!title) throw new Error('No title found');
 
+    // Try description from selectors + OG meta
     const description = await page.evaluate(() => {
-      const descElement = document.querySelector('.description, .desc, #description');
-      return descElement ? descElement.textContent?.trim() : null;
+      const selectors = [
+        '.description',
+        '.desc',
+        '#description'
+      ];
+      for (const sel of selectors) {
+        const el = document.querySelector(sel);
+        if (el?.textContent?.trim()) return el.textContent.trim();
+      }
+      const ogDesc = document.querySelector('meta[property="og:description"]') as HTMLMetaElement;
+      if (ogDesc?.content) return ogDesc.content.trim();
+      return null;
     });
 
+    // Try thumbnail from OG meta, video poster, or img
     const thumbnail = await page.evaluate(() => {
-      const ogImage = document.querySelector('meta[property="og:image"]');
-      if (ogImage) {
-        return ogImage.getAttribute('content');
-      }
-      const videoPoster = document.querySelector('video');
-      if (videoPoster) {
-        return videoPoster.getAttribute('poster');
-      }
+      const ogImage = document.querySelector('meta[property="og:image"]') as HTMLMetaElement;
+      if (ogImage?.content) return ogImage.content;
+
+      const videoPoster = document.querySelector('video') as HTMLVideoElement;
+      if (videoPoster?.poster) return videoPoster.poster;
+
+      const img = document.querySelector('img') as HTMLImageElement;
+      if (img?.src) return img.src;
+
       return null;
     });
 
     return {
+      url: normalized,
       title,
       description: description || undefined,
       thumbnail: thumbnail || undefined,
     };
-  } catch (error) {
-    console.error(`Failed to scrape ${url}:`, error);
-    return null;
+
+  } catch (error: any) {
+    return { url: normalized, title: '', error: error.message };
   } finally {
-    if (browser) {
-      await browser.close();
-    }
+    await page.close();
   }
 }
 
+export async function scrapeWithPlaywright(urls: string[]): Promise<ScrapedMetadata[]> {
+  const browser = await chromium.launch({ headless: true });
+  const results: ScrapedMetadata[] = [];
 
-export { scrapeWithPlaywright, normalizeUrl };
+  // Limit concurrency to avoid overload — batch size = 5
+  const concurrency = 5;
+  const batches = [];
+
+  for (let i = 0; i < urls.length; i += concurrency) {
+    batches.push(urls.slice(i, i + concurrency));
+  }
+
+  for (const batch of batches) {
+    const batchResults = await Promise.all(batch.map(url => scrapeSingle(url, browser)));
+    results.push(...batchResults);
+  }
+
+  await browser.close();
+  return results;
+}
