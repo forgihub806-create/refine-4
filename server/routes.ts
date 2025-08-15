@@ -18,23 +18,38 @@ async function scrapeMetadata(mediaItemId: string, storage: IStorage) {
   const mediaItem = await storage.getMediaItem(mediaItemId);
   if (!mediaItem) return;
 
+  console.log(`Scraping metadata for: ${mediaItem.url}`);
   const results = await scrapeWithPlaywright([mediaItem.url]);
   const result = results[0];
 
   if (result) {
+    console.log('Scrape result:', result);
+
+    if (result.title) {
+      const updates = {
+        title: result.title,
+        description: result.description || mediaItem.description,
+        thumbnail: result.thumbnail || mediaItem.thumbnail,
+        error: null,
+        scrapedAt: new Date(),
+      };
+      console.log('Updating media item with new metadata:', updates);
+      await storage.updateMediaItem(mediaItemId, updates);
+    } else {
+      const updates = {
+        error: result.error || "Scraping failed to find a title.",
+        scrapedAt: new Date(),
+      };
+      console.log('Updating media item with scrape error:', updates);
+      await storage.updateMediaItem(mediaItemId, updates);
+    }
+  } else {
     const updates = {
-      title: result.title || mediaItem.title || "Unknown Title",
-      description: result.description || mediaItem.description,
-      thumbnail: result.thumbnail || mediaItem.thumbnail,
-      error: null,
+      error: "Failed to scrape metadata (no result returned).",
       scrapedAt: new Date(),
     };
+    console.log('Updating media item with general scrape failure:', updates);
     await storage.updateMediaItem(mediaItemId, updates);
-  } else {
-    await storage.updateMediaItem(mediaItemId, {
-      error: "Failed to scrape metadata",
-      scrapedAt: new Date(),
-    });
   }
 }
 

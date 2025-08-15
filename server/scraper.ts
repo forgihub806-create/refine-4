@@ -24,6 +24,7 @@ function normalizeUrl(url: string): string {
 
 async function scrapeSingle(url: string, browser: Browser): Promise<ScrapedMetadata> {
   const normalized = normalizeUrl(url);
+  console.log(`[Scraper] Starting to scrape single URL: ${normalized}`);
   const page: Page = await browser.newPage();
   try {
     await page.goto(normalized, { waitUntil: 'networkidle' });
@@ -88,8 +89,10 @@ async function scrapeSingle(url: string, browser: Browser): Promise<ScrapedMetad
     };
 
   } catch (error: any) {
+    console.error(`[Scraper] Error scraping ${normalized}:`, error);
     return { url: normalized, title: '', error: error.message };
   } finally {
+    console.log(`[Scraper] Closing page for ${normalized}`);
     await page.close();
   }
 }
