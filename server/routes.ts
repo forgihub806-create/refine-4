@@ -18,9 +18,10 @@ async function scrapeMetadata(mediaItemId: string, storage: IStorage) {
   const mediaItem = await storage.getMediaItem(mediaItemId);
   if (!mediaItem) return;
 
-  const result = await scrapeWithPlaywright(mediaItem.url);
+  const results = await scrapeWithPlaywright([mediaItem.url]);
+  const result = results[0];
 
-  if (result) {
+  if (result && !result.error) {
     const updates = {
       title: result.title || mediaItem.title || "Unknown Title",
       description: result.description || mediaItem.description,
@@ -31,7 +32,7 @@ async function scrapeMetadata(mediaItemId: string, storage: IStorage) {
     await storage.updateMediaItem(mediaItemId, updates);
   } else {
     await storage.updateMediaItem(mediaItemId, {
-      error: "Failed to scrape metadata",
+      error: result?.error || "Failed to scrape metadata",
       scrapedAt: new Date(),
     });
   }

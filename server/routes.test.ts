@@ -24,7 +24,7 @@ describe('API Routes', () => {
   it('should respond to /health with OK', async () => {
     const response = await request(app).get('/health');
     expect(response.status).toBe(200);
-    expect(response.text).toBe('OK');
+    expect(response.body.status).toBe('ok');
   });
 
   it('should create a media item', async () => {
